@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iloncha — mini o‘yin</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    padding: 18px; color: #f4f7fb; font-family: Arial, sans-serif;
+    background: radial-gradient(circle at top, #203b58, #0b1422 65%);
+  }
+  .game {
+    width: min(100%, 520px); padding: 22px; border: 1px solid #38516b;
+    border-radius: 22px; background: #111f30; box-shadow: 0 18px 55px #0008;
+  }
+  h1 { margin: 0 0 6px; text-align: center; font-size: 30px; }
+  .hint { margin: 0 0 18px; text-align: center; color: #a9bfd4; font-size: 14px; }
+  .stats { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .stat { flex: 1; padding: 10px; text-align: center; border-radius: 12px; background: #1c3046; }
+  .stat small { display: block; color: #a9bfd4; margin-bottom: 4px; }
+  .stat strong { font-size: 22px; color: #7ef0b0; }
+  canvas {
+    display: block; width: 100%; aspect-ratio: 1; border-radius: 14px;
+    background: #091522; border: 2px solid #2c4962; touch-action: none;
+  }
+  .buttons { display: flex; gap: 9px; margin-top: 14px; }
+  button {
+    border: 0; border-radius: 11px; padding: 12px 14px; color: #071521;
+    background: #7ef0b0; font-weight: bold; font-size: 15px; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.secondary { color: #eaf3fb; background: #29445e; }
+  #message { min-height: 22px; margin: 12px 0 4px; text-align: center; color: #c6d7e6; }
+  .controls { display: grid; grid-template-columns: repeat(3, 54px); justify-content: center; gap: 6px; margin-top: 12px; }
+  .controls button { padding: 10px; font-size: 19px; }
+  .controls .empty { visibility: hidden; }
+  @media (min-width: 600px) { .controls { display: none; } }
+</style>
+</head>
+<body>
+<main class="game">
+  <h1>🐍 ILONCHA</h1>
+  <p class="hint">Olmalarni yegin va devorga yoki o‘zingizga urilmang!</p>
+  <section class="stats">
+    <div class="stat"><small>Hisob</small><strong id="score">0</strong></div>
+    <div class="stat"><small>Eng yaxshi</small><strong id="best">0</strong></div>
+  </section>
+  <canvas id="board" width="420" height="420" aria-label="Iloncha o‘yini maydoni"></canvas>
+  <div id="message">Boshlash tugmasini bosing.</div>
+  <div class="buttons">
+    <button id="start" style="flex:1">▶ Boshlash</button>
+    <button id="pause" class="secondary">Ⅱ Pauza</button>
+    <button id="reset" class="secondary">↻ Qayta</button>
+  </div>
+  <div class="controls" aria-label="Harakat tugmalari">
+    <span class="empty"></span><button data-dir="up">▲</button><span class="empty"></span>
+    <button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button>
+  </div>
+  <p class="hint" style="margin:14px 0 0">Kompyuter: ← ↑ → ↓ yoki WASD tugmalari. Telefon: pastdagi tugmalar.</p>
+</main>
+<script>
+(() => {
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const message = document.getElementById('message');
+  const size = 21, cells = 20, step = canvas.width / cells;
+  let snake, food, direction, nextDirection, score, best, timer, running, ended;
+
+  try { best = Number(localStorage.getItem('ilonchaBest') || 0); }
+  catch (_) { best = 0; }
+  bestEl.textContent = best;
+
+  function randomFood() {
+    let p;
+    do { p = {x: Math.floor(Math.random()*cells), y: Math.floor(Math.random()*cells)}; }
+    while (snake.some(s => s.x === p.x && s.y === p.y));
+    return p;
+  }
+  function reset() {
+    clearInterval(timer); running = false; ended = false;
+    snake = [{x:9,y:10},{x:8,y:10},{x:7,y:10}];
+    direction = {x:1,y:0}; nextDirection = {x:1,y:0};
+    score = 0; food = randomFood();
+    scoreEl.textContent = score;
+    message.textContent = 'Boshlash tugmasini bosing.';
+    draw();
+  }
+  function draw() {
+    ctx.fillStyle = '#091522'; ctx.fillRect(0,0,420,420);
+    ctx.strokeStyle = '#14283a'; ctx.lineWidth = 1;
+    for(let i=1;i<cells;i++){ctx.beginPath();ctx.moveTo(i*step,0);ctx.lineTo(i*step,420);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*step);ctx.lineTo(420,i*step);ctx.stroke();}
+    ctx.fillStyle = '#ff6b6b'; ctx.beginPath();
+    ctx.arc(food.x*step+step/2,food.y*step+step/2,step*.36,0,Math.PI*2);ctx.fill();
+    snake.forEach((p,i)=>{ctx.fillStyle=i===0?'#a5ffd0':'#48c98a';ctx.beginPath();ctx.roundRect(p.x*step+2,p.y*step+2,step-4,step-4,5);ctx.fill();});
+    if(!running && ended){ctx.fillStyle='#071521bb';ctx.fillRect(0,0,420,420);ctx.fillStyle='white';ctx.font='bold 30px Arial';ctx.textAlign='center';ctx.fillText('O‘YIN TUGADI',210,195);ctx.font='18px Arial';ctx.fillText('Qayta boshlash uchun ↻ ni bosing',210,230);}
+  }
+  function finish() {
+    running=false; ended=true; clearInterval(timer);
+    message.textContent='O‘yin tugadi! Natijangiz: '+score;
+    draw();
+  }
+  function tick() {
+    direction = nextDirection;
+    const head={x:snake[0].x+direction.x,y:snake[0].y+direction.y};
+    if(head.x<0||head.x>=cells||head.y<0||head.y>=cells||snake.some(p=>p.x===head.x&&p.y===head.y)){finish();return;}
+    snake.unshift(head);
+    if(head.x===food.x&&head.y===food.y){
+      score+=10; scoreEl.textContent=score;
+      if(score>best){best=score;bestEl.textContent=best;try{localStorage.setItem('ilonchaBest',best);}catch(_){}}
+      food=randomFood();
+      if(score%50===0 && timer){clearInterval(timer);timer=setInterval(tick,Math.max(65,135-score/10));}
+    } else snake.pop();
+    draw();
+  }
+  function start() {
+    if(running) return;
+    if(ended) reset();
+    running=true; message.textContent='Omad! Olmalarni yig‘ing.';
+    timer=setInterval(tick,135);
+  }
+  function pause() {
+    if(!running) return;
+    running=false;clearInterval(timer);message.textContent='Pauza. Davom etish uchun Boshlash tugmasini bosing.';
+  }
+  function setDir(d) {
+    const dirs={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+    const n=dirs[d]; if(!n) return;
+    if(n.x!==-direction.x || n.y!==-direction.y) nextDirection=n;
+  }
+  document.getElementById('start').addEventListener('click',start);
+  document.getElementById('pause').addEventListener('click',pause);
+  document.getElementById('reset').addEventListener('click',reset);
+  document.querySelectorAll('[data-dir]').forEach(b=>b.addEventListener('click',()=>setDir(b.dataset.dir)));
+  document.addEventListener('keydown',e=>{
+    const keys={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
+    if(keys[e.key]){e.preventDefault();setDir(keys[e.key]);}
+    if(e.key===' '){e.preventDefault();running?pause():start();}
+  });
+  let touchX=0,touchY=0;
+  canvas.addEventListener('touchstart',e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY;},{passive:true});
+  canvas.addEventListener('touchend',e=>{
+    const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;
+    if(Math.max(Math.abs(dx),Math.abs(dy))>18)setDir(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));
+  },{passive:true});
+  reset();
+})();
+</script>
+</body>
+</html>
